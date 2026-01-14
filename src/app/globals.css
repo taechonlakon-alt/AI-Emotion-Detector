@@ -1,26 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Model Theme - Cream & Elegant Tone */
+  --background: #F9F7F2; /* Ivory form/Cream */
+  --foreground: #2A2A2A; /* Soft Black/Charcoal */
+  --accent: #D4C4A8;     /* Muted Gold/Beige */
+  --muted: #8C8C8C;      /* Gray for secondary text */
+  --card: #FFFFFF;       /* White for cards */
+  --border: #E5E0D8;     /* Subtle border */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-card: var(--card);
+  --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
+  /* Optional: slightly darker cream for dark mode or just keep the mood */
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #1C1C1C;
+    --foreground: #F2F0E9;
+    --accent: #A6967A;
+    --card: #2A2A2A;
+    --border: #444444;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  letter-spacing: 0.02em; /* Slightly wider text for elegance */
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
