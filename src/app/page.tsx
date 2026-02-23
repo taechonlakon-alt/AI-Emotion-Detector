@@ -83,10 +83,22 @@ export default function Home() {
 
   async function startCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false,
-      });
+      let stream: MediaStream;
+      try {
+        // Try rear camera first
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+      } catch (err: any) {
+        // Fallback to any camera if rear camera is not available
+        console.warn("Rear camera not available, falling back to default camera", err);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
