@@ -1,1 +1,8 @@
-["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+[
+    "Early-Turning",
+    "Green",
+    "Late-Turning",
+    "Red",
+    "Turning",
+    "White"
+]
