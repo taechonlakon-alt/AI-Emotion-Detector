@@ -62,6 +62,7 @@ export default function Home() {
   const [status, setStatus] = useState("Loading AI Model...");
   const [modelReady, setModelReady] = useState(false);
   const [isCameraOn, setIsCameraOn] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<"environment" | "user">("environment");
   const [detections, setDetections] = useState<Detection[]>([]);
 
   // Load ONNX model on mount
@@ -70,7 +71,7 @@ export default function Home() {
       try {
         setStatus("Downloading AI Model (~44 MB)...");
         const session = await ort.InferenceSession.create("/models/best.onnx", {
-          executionProviders: ["wasm"],
+          executionProviders: ["webgl", "wasm"],
         });
         sessionRef.current = session;
         setModelReady(true);
@@ -81,20 +82,29 @@ export default function Home() {
     })();
   }, []);
 
-  async function startCamera() {
+  function stopCamera() {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  }
+
+  async function startCamera(overrideMode?: "environment" | "user") {
     try {
+      stopCamera();
+      const modeToUse = overrideMode || cameraFacingMode;
+
       let stream: MediaStream;
       try {
-        // Try rear camera first
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
+          video: { facingMode: modeToUse, width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false,
         });
       } catch (err: any) {
-        // Fallback to any camera if rear camera is not available
-        console.warn("Rear camera not available, falling back to default camera", err);
+        console.warn(`Camera mode ${modeToUse} not available, falling back to default`, err);
         stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: { width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false,
         });
       }
@@ -106,6 +116,14 @@ export default function Home() {
       setStatus("Active");
     } catch (e: unknown) {
       setStatus(`Camera Error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  function toggleCamera() {
+    const newMode = cameraFacingMode === "environment" ? "user" : "environment";
+    setCameraFacingMode(newMode);
+    if (isCameraOn) {
+      startCamera(newMode);
     }
   }
 
@@ -210,7 +228,7 @@ export default function Home() {
     }
 
     const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     try {
       const { data, scaleX, scaleY, padX, padY } = preprocessFrame(video);
@@ -266,21 +284,21 @@ export default function Home() {
   }, {});
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col items-center justify-center p-4 font-sans selection:bg-pink-500">
+    <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col items-center p-3 sm:p-4 font-sans selection:bg-pink-500">
       {/* Background blobs */}
-      <div className="absolute inset-0 -z-10 overflow-hidden opacity-20 pointer-events-none">
+      <div className="fixed inset-0 -z-10 overflow-hidden opacity-20 pointer-events-none">
         <div className="absolute top-[10%] left-[20%] w-72 h-72 bg-red-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob" />
         <div className="absolute top-[10%] right-[20%] w-72 h-72 bg-green-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000" />
         <div className="absolute bottom-[20%] left-1/2 w-72 h-72 bg-yellow-600 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000 -translate-x-1/2" />
       </div>
 
-      <div className="w-full max-w-4xl space-y-6 z-10">
+      <div className="w-full max-w-4xl space-y-4 sm:space-y-6 z-10">
         {/* Header */}
-        <header className="text-center space-y-2">
-          <h1 className="text-4xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-green-500 tracking-tight">
+        <header className="text-center space-y-1 sm:space-y-2 pt-2">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-red-400 to-green-500 tracking-tight">
             Strawberry Ripeness Checker
           </h1>
-          <p className="text-neutral-400 text-sm">
+          <p className="text-neutral-400 text-xs sm:text-sm">
             Real-time Detection · Powered by YOLO11 · Runs fully in your browser
           </p>
         </header>
@@ -296,14 +314,75 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Camera canvas */}
-          <div className="lg:col-span-2 relative aspect-[3/4] sm:aspect-video bg-black rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl">
-            <video ref={videoRef} className="hidden" playsInline muted autoPlay />
-            <canvas ref={canvasRef} className="w-full h-full object-cover" />
+        <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 sm:gap-6">
+          {/* Camera view */}
+          <div className="lg:col-span-2 relative bg-black rounded-2xl sm:rounded-3xl overflow-hidden border border-neutral-800 shadow-[0_0_30px_rgba(0,0,0,0.5)]"
+            style={{ height: '65vh', minHeight: '350px', maxHeight: '700px' }}>
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              autoPlay
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+            <canvas
+              ref={canvasRef}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 10, pointerEvents: 'none' }}
+            />
 
+            {/* Switch Camera Button — bottom-right, glassmorphism */}
+            {isCameraOn && (
+              <button
+                onClick={toggleCamera}
+                style={{
+                  position: 'absolute',
+                  bottom: '16px',
+                  right: '16px',
+                  zIndex: 30,
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '50%',
+                  border: '1.5px solid rgba(255,255,255,0.25)',
+                  background: 'rgba(0,0,0,0.35)',
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  color: 'white',
+                }}
+                className="hover:scale-110 active:scale-95 group"
+                title="Switch Camera"
+              >
+                <svg
+                  className="transition-transform duration-500 group-hover:rotate-180"
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20 16v-4a2 2 0 00-2-2h-3l-2-3H9L7 10H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2z" />
+                  <circle cx="12" cy="15" r="3" />
+                  <path d="M7 4l3 0" />
+                  <path d="M7 4l1.5 -1.5" />
+                  <path d="M7 4l1.5 1.5" />
+                  <path d="M17 4l-3 0" />
+                  <path d="M17 4l-1.5 -1.5" />
+                  <path d="M17 4l-1.5 1.5" />
+                </svg>
+              </button>
+            )}
+
+            {/* Overlay when camera off */}
             {!isCameraOn && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-neutral-900/70 backdrop-blur-sm z-10">
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', background: 'rgba(23,23,23,0.75)', backdropFilter: 'blur(8px)', zIndex: 20 }}>
                 {!modelReady ? (
                   <>
                     <div className="w-10 h-10 border-4 border-red-500 border-t-transparent rounded-full animate-spin" />
@@ -312,7 +391,7 @@ export default function Home() {
                   </>
                 ) : (
                   <button
-                    onClick={startCamera}
+                    onClick={() => startCamera()}
                     className="flex items-center gap-2 px-8 py-3 bg-red-600 hover:bg-red-500 rounded-full font-bold text-white transition-all hover:scale-105 active:scale-95 shadow-lg shadow-red-500/20"
                   >
                     <span>📸</span> Start Scanner
@@ -321,25 +400,25 @@ export default function Home() {
               </div>
             )}
 
-            {/* Scanline */}
+            {/* Scanline effect */}
             {isCameraOn && (
-              <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(transparent_0%,rgba(255,0,0,0.15)_50%,transparent_100%)] bg-[length:100%_4px] animate-scanline" />
+              <div className="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(transparent_0%,rgba(255,0,0,0.15)_50%,transparent_100%)] bg-[length:100%_4px] animate-scanline" style={{ zIndex: 15 }} />
             )}
           </div>
 
           {/* Stats panel */}
-          <div className="lg:col-span-1 flex flex-col gap-4">
+          <div className="lg:col-span-1 flex flex-col gap-3 sm:gap-4">
             {/* Total count */}
-            <div className="bg-neutral-900/60 backdrop-blur-md border border-neutral-800 rounded-2xl p-6 text-center">
+            <div className="bg-neutral-900/60 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 sm:p-6 text-center">
               <h3 className="text-neutral-400 text-xs uppercase tracking-widest mb-2">Detected</h3>
-              <div className="text-6xl font-extrabold text-white tabular-nums leading-none">
+              <div className="text-5xl sm:text-6xl font-extrabold text-white tabular-nums leading-none">
                 {detections.length}
               </div>
               <div className="text-neutral-500 text-xs mt-2">strawberries in frame</div>
             </div>
 
             {/* Per-class breakdown */}
-            <div className="bg-neutral-900/60 backdrop-blur-md border border-neutral-800 rounded-2xl p-5 flex flex-col gap-3 flex-1 overflow-y-auto max-h-[40vh] lg:max-h-full">
+            <div className="bg-neutral-900/60 backdrop-blur-md border border-neutral-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-3 flex-1 overflow-y-auto max-h-[35vh] lg:max-h-full">
               <h3 className="text-neutral-400 text-xs uppercase tracking-widest sticky top-0 bg-neutral-900/90 py-1">Ripeness Breakdown</h3>
               {Object.keys(countByClass).length === 0 ? (
                 <p className="text-neutral-600 text-xs text-center py-4 flex-1 flex items-center justify-center">
@@ -371,8 +450,8 @@ export default function Home() {
               )}
             </div>
 
-            <div className="p-4 rounded-xl bg-neutral-800/30 border border-neutral-700/50 text-xs text-neutral-500 text-center">
-              Point your camera at strawberries to detect ripeness in real-time. Use rear camera if available.
+            <div className="p-3 sm:p-4 rounded-xl bg-neutral-800/30 border border-neutral-700/50 text-xs text-neutral-500 text-center">
+              Point your camera at strawberries to detect ripeness in real-time. Tap 📷 to switch cameras.
             </div>
           </div>
         </div>
